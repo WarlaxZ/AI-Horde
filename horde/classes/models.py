@@ -5,6 +5,13 @@ from horde.flask import db
 # from sqlalchemy.dialects.postgresql import UUID
 
 
+class UserStats(db.Model):
+    __tablename__ = "user_stats"
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+    name = db.Column(db.String(80), primary_key=True)
+    value = db.Column(db.Integer, nullable=False)
+
+
 class User(db.Model):
     # TODO CLEAN THIS UP, BUNCH OF DUPLICATES
     id = db.Column(db.String(50), primary_key=True, default=uuid.uuid4)  # Whilst using sqlite use this, as it has no uuid type
@@ -93,11 +100,11 @@ class User(db.Model):
 class PromptRequest(db.Model):
     """For storing prompts in the DB"""
     __tablename__ = "prompt"
-    id = db.Column(db.String(50), primary_key=True, default=uuid.uuid4) # Whilst using sqlite use this, as it has no uuid type
+    id = db.Column(db.String(50), primary_key=True, default=uuid.uuid4)  # Whilst using sqlite use this, as it has no uuid type
     # id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # Then move to this
     prompt = db.Column(db.Text, unique=True, nullable=False)
 
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+    user_id = db.Column(db.String(50), db.ForeignKey("user.id"), primary_key=True)
     user = db.relationship("User", backref=db.backref("prompt", lazy="dynamic"))
 
     tricked_workers = db.Column(db.JSON, default=[], nullable=False)
@@ -115,6 +122,7 @@ class PromptRequest(db.Model):
     workers = db.Column(db.JSON, default=[], nullable=False)
     faulted = db.Column(db.Boolean, default=False, nullable=False)
     consumed_kudos = db.Column(db.Integer, default=0, nullable=False)
+    model = db.Column(db.String(50), default="stable-diffusion", nullable=False)
 
     ttl = db.Column(db.Integer, default=1200, nullable=False)
 
@@ -125,3 +133,38 @@ class PromptRequest(db.Model):
 
     def set_job_ttl(self):
         raise NotImplementedError("This is not implemented yet")
+
+
+
+# new request has come in
+x = PromptRequest(prompt="test", user_id=1)
+
+db.session.add(x)
+db.session.commit()
+prompt_req_id = x.id
+
+
+
+# get the request, and update the ipaddr
+prompt_req2 = db.session.query(PromptRequest).filter_by(id=prompt_req_id).first()  # will be first or None
+prompt_req2.ipaddr = "new ip address"
+db.session.commit()
+
+
+# get a larger group of requests
+db.session.query(PromptRequest).order_by(PromptRequest.created.desc()).all()
+
+
+# get queue for worker
+get_the_queue_for_worker = db.session.query(PromptRequest).Join(User).filter(
+    PromptRequest.model._in(["models", "i", "have"])
+).order_by(
+    User.kudos.desc(),
+    PromptRequest.created.asc()
+).limit(10).all()
+
+
+# clear up old requests (older than 5 mins)
+db.session.query(PromptRequest).filter(
+    PromptRequest.model.created < datetime.datetime.utcnow() - datetime.timedelta(seconds=1200)
+).delete(synchronize_session=False)

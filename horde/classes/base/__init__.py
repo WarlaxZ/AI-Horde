@@ -856,117 +856,118 @@ class Worker:
             self.user.kudos += self.kudos_details["uptime"]
 
 
-# class Index:
-#     def __init__(self):
-#         self._index = {}
-#
-#     def add_item(self, item):
-#         self._index[item.id] = item
-#
-#     def get_item(self, uuid):
-#         return self._index.get(uuid)
-#
-#     def del_item(self, item):
-#         del self._index[item.id]
-#
-#     def get_all(self):
-#         return list(self._index.values())
-#
-#     def is_deleted(self, item):
-#         if item.id in self._index:
-#             return False
-#         return True
+class Index:
+    def __init__(self):
+        self._index = {}
 
-# class PromptsIndex(Index):
-#     def count_waiting_requests(self, user):
-#         count = 0
-#         for wp in list(self._index.values()):
-#             if wp.user == user and not wp.is_completed():
-#                 count += wp.n
-#         return count
-#
-#     def count_total_waiting_generations(self):
-#         count = 0
-#         for wp in list(self._index.values()):
-#             count += wp.n + wp.count_processing_gens()["processing"]
-#         return count
-#
-#     def count_totals(self):
-#         queued_thing = f"queued_{thing_name}"
-#         ret_dict = {
-#             "queued_requests": 0,
-#             queued_thing: 0,
-#         }
-#         for wp in list(self._index.values()):
-#             current_wp_queue = wp.n + wp.count_processing_gens()["processing"]
-#             ret_dict["queued_requests"] += current_wp_queue
-#             if current_wp_queue > 0:
-#                 ret_dict[queued_thing] += wp.things * current_wp_queue / thing_divisor
-#         # We round the end result to avoid to many decimals
-#         ret_dict[queued_thing] = round(ret_dict[queued_thing], 2)
-#         return ret_dict
-#
-#     def count_things_per_model(self):
-#         things_per_model = {}
-#         org = self.organize_by_model()
-#         for model in org:
-#             for wp in org[model]:
-#                 current_wp_queue = wp.n + wp.count_processing_gens()["processing"]
-#                 if current_wp_queue > 0:
-#                     things_per_model[model] = things_per_model.get(model, 0) + wp.things
-#             things_per_model[model] = round(things_per_model.get(model, 0), 2)
-#         return things_per_model
-#
-#     def get_waiting_wp_by_kudos(self):
-#         sorted_wp_list = sorted(
-#             self._index.values(), key=lambda x: x.get_priority(), reverse=True
-#         )
-#         final_wp_list = []
-#         for wp in sorted_wp_list:
-#             if wp.needs_gen():
-#                 final_wp_list.append(wp)
-#         # logger.debug([(wp,wp.get_priority()) for wp in final_wp_list])
-#         return final_wp_list
-#
-#     # Returns the queue position of the provided WP based on kudos
-#     # Also returns the amount of things until the wp is generated
-#     # Also returns the amount of different gens queued
-#     def get_wp_queue_stats(self, wp):
-#         things_ahead_in_queue = 0
-#         n_ahead_in_queue = 0
-#         priority_sorted_list = self.get_waiting_wp_by_kudos()
-#         for iter in range(len(priority_sorted_list)):
-#             things_ahead_in_queue += priority_sorted_list[iter].get_queued_things()
-#             n_ahead_in_queue += priority_sorted_list[iter].n
-#             if priority_sorted_list[iter] == wp:
-#                 things_ahead_in_queue = round(things_ahead_in_queue, 2)
-#                 return (iter, things_ahead_in_queue, n_ahead_in_queue)
-#         # -1 means the WP is done and not in the queue
-#         return (-1, 0, 0)
-#
-#     def organize_by_model(self):
-#         org = {}
-#         # We make a list here to prevent iterating when the list changes
-#         all_wps = list(self._index.values())
-#         for wp in all_wps:
-#             # Each wp we have will be placed on the list for each of it allowed models (in case it's selected multiple)
-#             # This will inflate the overall expected times, but it shouldn't be by much.
-#             # I don't see a way to do this calculation more accurately though
-#             for model in wp.models:
-#                 if not model in org:
-#                     org[model] = []
-#                 org[model].append(wp)
-#         return org
+    def add_item(self, item):
+        self._index[item.id] = item
+
+    def get_item(self, uuid):
+        return self._index.get(uuid)
+
+    def del_item(self, item):
+        del self._index[item.id]
+
+    def get_all(self):
+        return list(self._index.values())
+
+    def is_deleted(self, item):
+        if item.id in self._index:
+            return False
+        return True
+
+class PromptsIndex(Index):
+    def count_waiting_requests(self, user):
+        count = 0
+        for wp in list(self._index.values()):
+            if wp.user == user and not wp.is_completed():
+                count += wp.n
+        db.session.query(PromptRequest).count()
+        return count
+
+    def count_total_waiting_generations(self):
+        count = 0
+        for wp in list(self._index.values()):
+            count += wp.n + wp.count_processing_gens()["processing"]
+        return count
+
+    def count_totals(self):
+        queued_thing = f"queued_{thing_name}"
+        ret_dict = {
+            "queued_requests": 0,
+            queued_thing: 0,
+        }
+        for wp in list(self._index.values()):
+            current_wp_queue = wp.n + wp.count_processing_gens()["processing"]
+            ret_dict["queued_requests"] += current_wp_queue
+            if current_wp_queue > 0:
+                ret_dict[queued_thing] += wp.things * current_wp_queue / thing_divisor
+        # We round the end result to avoid to many decimals
+        ret_dict[queued_thing] = round(ret_dict[queued_thing], 2)
+        return ret_dict
+
+    def count_things_per_model(self):
+        things_per_model = {}
+        org = self.organize_by_model()
+        for model in org:
+            for wp in org[model]:
+                current_wp_queue = wp.n + wp.count_processing_gens()["processing"]
+                if current_wp_queue > 0:
+                    things_per_model[model] = things_per_model.get(model, 0) + wp.things
+            things_per_model[model] = round(things_per_model.get(model, 0), 2)
+        return things_per_model
+
+    def get_waiting_wp_by_kudos(self):
+        sorted_wp_list = sorted(
+            self._index.values(), key=lambda x: x.get_priority(), reverse=True
+        )
+        final_wp_list = []
+        for wp in sorted_wp_list:
+            if wp.needs_gen():
+                final_wp_list.append(wp)
+        # logger.debug([(wp,wp.get_priority()) for wp in final_wp_list])
+        return final_wp_list
+
+    # Returns the queue position of the provided WP based on kudos
+    # Also returns the amount of things until the wp is generated
+    # Also returns the amount of different gens queued
+    def get_wp_queue_stats(self, wp):
+        things_ahead_in_queue = 0
+        n_ahead_in_queue = 0
+        priority_sorted_list = self.get_waiting_wp_by_kudos()
+        for iter in range(len(priority_sorted_list)):
+            things_ahead_in_queue += priority_sorted_list[iter].get_queued_things()
+            n_ahead_in_queue += priority_sorted_list[iter].n
+            if priority_sorted_list[iter] == wp:
+                things_ahead_in_queue = round(things_ahead_in_queue, 2)
+                return (iter, things_ahead_in_queue, n_ahead_in_queue)
+        # -1 means the WP is done and not in the queue
+        return (-1, 0, 0)
+
+    def organize_by_model(self):
+        org = {}
+        # We make a list here to prevent iterating when the list changes
+        all_wps = list(self._index.values())
+        for wp in all_wps:
+            # Each wp we have will be placed on the list for each of it allowed models (in case it's selected multiple)
+            # This will inflate the overall expected times, but it shouldn't be by much.
+            # I don't see a way to do this calculation more accurately though
+            for model in wp.models:
+                if not model in org:
+                    org[model] = []
+                org[model].append(wp)
+        return org
 
 
-# class GenerationsIndex(Index):
-#     def organize_by_model():
-#         org = {}
-#         for procgen in self._index.values():
-#             if not procgen.model in org:
-#                 org[model] = []
-#             org[model].append(procgen)
-#         return org
+class GenerationsIndex(Index):
+    def organize_by_model():
+        org = {}
+        for procgen in self._index.values():
+            if not procgen.model in org:
+                org[model] = []
+            org[model].append(procgen)
+        return org
 
 
 class User:

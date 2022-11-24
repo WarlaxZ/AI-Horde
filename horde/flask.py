@@ -12,6 +12,7 @@ db = SQLAlchemy()
 
 HORDE.wsgi_app = ProxyFix(HORDE.wsgi_app, x_for=1)
 HORDE.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///horde.db"
+
 db.init_app(HORDE)
 
 if is_redis_up():

@@ -1,9 +1,9 @@
 from .v2 import *
 
+
 class AsyncGenerate(AsyncGenerate):
-    
     def initiate_waiting_prompt(self):
-        self.softprompts = ['']
+        self.softprompts = [""]
         if self.args.softprompts:
             self.softprompts = self.args.softprompts
         self.wp = WaitingPrompt(
@@ -13,20 +13,19 @@ class AsyncGenerate(AsyncGenerate):
             self.args["prompt"],
             self.user,
             self.params,
-            workers = self.workers,
-            models = self.models,
-            softprompts = self.softprompts,
-            trusted_workers = self.args["trusted_workers"],
+            workers=self.workers,
+            models=self.models,
+            softprompts=self.softprompts,
+            trusted_workers=self.args["trusted_workers"],
         )
 
     def get_size_too_big_message(self):
-        return("Warning: No available workers can fulfill this request. It will expire in 10 minutes. Consider reducing the amount of tokens to generate.")
+        return "Warning: No available workers can fulfill this request. It will expire in 10 minutes. Consider reducing the amount of tokens to generate."
 
 
 class SyncGenerate(SyncGenerate):
-
     def initiate_waiting_prompt(self):
-        self.softprompts = ['']
+        self.softprompts = [""]
         if self.args.softprompts:
             self.softprompts = self.args.softprompts
         self.wp = WaitingPrompt(
@@ -36,14 +35,14 @@ class SyncGenerate(SyncGenerate):
             self.args["prompt"],
             self.user,
             self.params,
-            workers = self.workers,
-            models = self.models,
-            softprompts = self.softpompts,
-            trusted_workers = self.args["trusted_workers"],
+            workers=self.workers,
+            models=self.models,
+            softprompts=self.softpompts,
+            trusted_workers=self.args["trusted_workers"],
         )
 
-class JobPop(JobPop):
 
+class JobPop(JobPop):
     def check_in(self):
         self.softprompts = []
         if self.args.softprompts:
@@ -53,17 +52,16 @@ class JobPop(JobPop):
         if self.args.model:
             models = [self.args.model]
         self.worker.check_in(
-            self.args['max_length'],
-            self.args['max_content_length'],
+            self.args["max_length"],
+            self.args["max_content_length"],
             self.softprompts,
-            models = models,
-            nsfw = self.args.nsfw,
-            blacklist = self.blacklist,
-            safe_ip = self.safe_ip,
-            ipaddr = self.worker_ip,
-            threads = self.args.threads,
+            models=models,
+            nsfw=self.args.nsfw,
+            blacklist=self.blacklist,
+            safe_ip=self.safe_ip,
+            ipaddr=self.worker_ip,
+            threads=self.args.threads,
         )
-
 
     # Making it into its own function to allow extension
     def start_worker(self, wp):
@@ -71,30 +69,37 @@ class JobPop(JobPop):
             matching_softprompt = False
             for sp in wp.softprompts:
                 # If a None softprompts has been provided, we always match, since we can always remove the softprompt
-                if sp == '':
+                if sp == "":
                     matching_softprompt = sp
-                for sp_name in self.args['softprompts']:
+                for sp_name in self.args["softprompts"]:
                     # logger.info([sp_name,sp,sp in sp_name])
-                    if sp in sp_name: # We do a very basic string matching. Don't think we need to do regex
+                    if (
+                        sp in sp_name
+                    ):  # We do a very basic string matching. Don't think we need to do regex
                         matching_softprompt = sp_name
                         break
                 if matching_softprompt:
                     break
         ret = wp.start_generation(self.worker, matching_softprompt)
-        return(ret)
+        return ret
 
 
 class HordeLoad(HordeLoad):
     # When we extend the actual method, we need to re-apply the decorators
     @logger.catch(reraise=True)
     @cache.cached(timeout=2)
-    @api.marshal_with(models.response_model_horde_performance, code=200, description='Horde Maintenance')
+    @api.marshal_with(
+        models.response_model_horde_performance,
+        code=200,
+        description="Horde Maintenance",
+    )
     def get(self):
-        '''Details about the current performance of this Horde
-        '''
+        """Details about the current performance of this Horde
+        """
         load_dict = super().get()[0]
         load_dict["past_minute_tokens"] = db.stats.get_things_per_min()
-        return(load_dict,200)
+        return (load_dict, 200)
+
 
 api.add_resource(SyncGenerate, "/generate/sync")
 api.add_resource(AsyncGenerate, "/generate/async")

@@ -1,21 +1,23 @@
-from .v2 import *
 import base64
 from io import BytesIO
+
 from PIL import Image
+
+from .v2 import *
 
 
 def convert_source_image_to_webp(source_image_b64):
-    '''Convert img2img sources to 90% compressed webp, to avoid wasting bandwidth, while still supporting all types'''
+    """Convert img2img sources to 90% compressed webp, to avoid wasting bandwidth, while still supporting all types"""
     except_msg = None
     try:
-        if source_image_b64 == None:
-            return(source_image_b64)
-        base64_bytes = source_image_b64.encode('utf-8')
+        if source_image_b64 is None:
+            return source_image_b64
+        base64_bytes = source_image_b64.encode("utf-8")
         img_bytes = base64.b64decode(base64_bytes)
         image = Image.open(BytesIO(img_bytes))
         width, height = image.size
         resolution = width * height
-        resolution_threshold = 3072*3072
+        resolution_threshold = 3072 * 3072
         if resolution > resolution_threshold:
             except_msg = "Image size cannot exceed 3072*3072 pixels"
             raise e.ImageValidationFailed()
@@ -27,47 +29,59 @@ def convert_source_image_to_webp(source_image_b64):
         elif resolution > resolution_threshold * 0.8:
             quality = 60
         elif resolution > resolution_threshold * 0.6:
-            logger.debug([resolution,resolution_threshold * 0.6])
+            logger.debug([resolution, resolution_threshold * 0.6])
             quality = 70
         elif resolution > resolution_threshold * 0.4:
-            logger.debug([resolution,resolution_threshold * 0.4])
+            logger.debug([resolution, resolution_threshold * 0.4])
             quality = 80
         elif resolution > resolution_threshold * 0.3:
-            logger.debug([resolution,resolution_threshold * 0.4])
+            logger.debug([resolution, resolution_threshold * 0.4])
             quality = 90
         elif resolution > resolution_threshold * 0.15:
             quality = 95
         image.save(buffer, format="WebP", quality=quality)
         final_image_b64 = base64.b64encode(buffer.getvalue()).decode("utf8")
-        logger.debug(f"Received img2img source of {width}*{height}. Started {round(len(source_image_b64) / 1000)} base64 kilochars. Ended with quality {quality} = {round(len(final_image_b64) / 1000)} base64 kilochars")
-        return(final_image_b64)
+        logger.debug(
+            f"Received img2img source of {width}*{height}. Started {round(len(source_image_b64) / 1000)} base64 kilochars. Ended with quality {quality} = {round(len(final_image_b64) / 1000)} base64 kilochars"
+        )
+        return final_image_b64
     except e.ImageValidationFailed:
         raise e.ImageValidationFailed(except_msg)
     except:
         raise e.ImageValidationFailed
 
+
 class AsyncGenerate(AsyncGenerate):
-    
+    def __init__(self):
+        self.safe_ip = None
+        self.wp = None
+        super().__init__()
+
     def validate(self):
         super().validate()
         # Temporary exception. During trial period only trusted users can use img2img
         if not self.user.trusted:
             self.safe_ip = cm.is_ip_safe(self.user_ip)
             # We allow unsafe IPs when being rate limited as they're only temporary
-            if self.safe_ip == None:
+            if self.safe_ip is None:
                 self.safe_ip = True
             # We actually block unsafe IPs for now to combat CP
             if not self.safe_ip:
                 raise e.NotTrusted
         if not self.args.source_image and self.args.source_mask:
             raise e.SourceMaskUnnecessary
-        if self.args.source_image and self.args.source_processing == "img2img" and self.params.get("sampler_name") in ["k_dpm_fast", "k_dpm_adaptive", "k_dpmpp_2s_a", "k_dpmpp_2m"]:
+        if (
+            self.args.source_image
+            and self.args.source_processing == "img2img"
+            and self.params.get("sampler_name")
+            in ["k_dpm_fast", "k_dpm_adaptive", "k_dpmpp_2s_a", "k_dpmpp_2m"]
+        ):
             raise e.UnsupportedSampler
-        if len(self.args['prompt'].split()) > 500:
+        if len(self.args["prompt"].split()) > 500:
             raise e.InvalidPromptSize(self.username)
 
     def get_size_too_big_message(self):
-        return("Warning: No available workers can fulfill this request. It will expire in 10 minutes. Consider reducing the size to 512x512")
+        return "Warning: No available workers can fulfill this request. It will expire in 10 minutes. Consider reducing the size to 512x512"
 
     # We split this into its own function, so that it may be overriden
     def initiate_waiting_prompt(self):
@@ -78,25 +92,32 @@ class AsyncGenerate(AsyncGenerate):
             self.args["prompt"],
             self.user,
             self.params,
-            workers = self.workers,
-            nsfw = self.args["nsfw"],
-            censor_nsfw = self.args["censor_nsfw"],
-            trusted_workers = self.args["trusted_workers"],
-            models = self.models,
-            source_image = convert_source_image_to_webp(self.args.source_image),
-            source_processing = self.args.source_processing,
-            source_mask = convert_source_image_to_webp(self.args.source_mask),
-            ipaddr = self.user_ip,
+            workers=self.workers,
+            nsfw=self.args["nsfw"],
+            censor_nsfw=self.args["censor_nsfw"],
+            trusted_workers=self.args["trusted_workers"],
+            models=self.models,
+            source_image=convert_source_image_to_webp(self.args.source_image),
+            source_processing=self.args.source_processing,
+            source_mask=convert_source_image_to_webp(self.args.source_mask),
+            ipaddr=self.user_ip,
         )
-        needs_kudos,resolution = self.wp.requires_upfront_kudos()
+        needs_kudos, resolution = self.wp.requires_upfront_kudos()
         if needs_kudos:
             required_kudos = self.wp.kudos * self.wp.n
             if required_kudos > self.user.kudos:
                 raise e.KudosUpfront(required_kudos, self.username, resolution)
             else:
-                logger.warning(f"{self.username} requested generation {self.wp.id} requiring upfront kudos: {required_kudos}")
-    
+                logger.warning(
+                    f"{self.username} requested generation {self.wp.id} requiring upfront kudos: {required_kudos}"
+                )
+
+
 class SyncGenerate(SyncGenerate):
+    def __init__(self):
+        self.safe_ip = None
+        self.wp = None
+        super().__init__()
 
     def validate(self):
         super().validate()
@@ -105,15 +126,13 @@ class SyncGenerate(SyncGenerate):
             if not self.user.trusted:
                 self.safe_ip = cm.is_ip_safe(self.user_ip)
                 # We allow unsafe IPs when being rate limited as they're only temporary
-                if self.safe_ip == False:
-                    self.safe_ip = False
+                if not self.safe_ip:
                     raise e.NotTrusted
         if not self.args.source_image and self.args.source_mask:
             raise e.SourceMaskUnnecessary
-        if len(self.args['prompt'].split()) > 80:
+        if len(self.args["prompt"].split()) > 80:
             raise e.InvalidPromptSize(self.username)
 
-    
     # We split this into its own function, so that it may be overriden
     def initiate_waiting_prompt(self):
         self.wp = WaitingPrompt(
@@ -123,59 +142,65 @@ class SyncGenerate(SyncGenerate):
             self.args["prompt"],
             self.user,
             self.params,
-            workers = self.workers,
-            nsfw = self.args["nsfw"],
-            censor_nsfw = self.args["censor_nsfw"],
-            trusted_workers = self.args["trusted_workers"],
-            models = self.models,
-            source_image = convert_source_image_to_webp(self.args.source_image),
-            source_processing = self.args.source_processing,
-            source_mask = convert_source_image_to_webp(self.args.source_mask),
-            ipaddr = self.user_ip,
+            workers=self.workers,
+            nsfw=self.args["nsfw"],
+            censor_nsfw=self.args["censor_nsfw"],
+            trusted_workers=self.args["trusted_workers"],
+            models=self.models,
+            source_image=convert_source_image_to_webp(self.args.source_image),
+            source_processing=self.args.source_processing,
+            source_mask=convert_source_image_to_webp(self.args.source_mask),
+            ipaddr=self.user_ip,
         )
-        needs_kudos,resolution = self.wp.requires_upfront_kudos()
+        needs_kudos, resolution = self.wp.requires_upfront_kudos()
         if needs_kudos:
             required_kudos = self.wp.kudos * self.wp.n
             if required_kudos > self.user.kudos:
                 raise e.KudosUpfront(required_kudos, self.username, resolution)
             else:
-                logger.warning(f"{self.username} requested generation {self.wp.id} requiring upfront kudos: {required_kudos}")
+                logger.warning(
+                    f"{self.username} requested generation {self.wp.id} requiring upfront kudos: {required_kudos}"
+                )
 
-    
+
 class JobPop(JobPop):
-
     def check_in(self):
         self.worker.check_in(
-            self.args.max_pixels, 
-            nsfw = self.args.nsfw, 
-            blacklist = self.blacklist, 
-            models = self.models, 
-            safe_ip = self.safe_ip,
-            ipaddr = self.worker_ip,
-            threads = self.args.threads,
-            bridge_version = self.args.bridge_version,
-            allow_img2img = self.args.allow_img2img,
-            allow_painting = self.args.allow_painting,
-            allow_unsafe_ipaddr = self.args.allow_unsafe_ipaddr,
+            self.args.max_pixels,
+            nsfw=self.args.nsfw,
+            blacklist=self.blacklist,
+            models=self.models,
+            safe_ip=self.safe_ip,
+            ipaddr=self.worker_ip,
+            threads=self.args.threads,
+            bridge_version=self.args.bridge_version,
+            allow_img2img=self.args.allow_img2img,
+            allow_painting=self.args.allow_painting,
+            allow_unsafe_ipaddr=self.args.allow_unsafe_ipaddr,
         )
-  
+
+
 class HordeLoad(HordeLoad):
     # When we extend the actual method, we need to re-apply the decorators
     @logger.catch(reraise=True)
     @cache.cached(timeout=2)
-    @api.marshal_with(models.response_model_horde_performance, code=200, description='Horde Maintenance')
+    @api.marshal_with(
+        models.response_model_horde_performance,
+        code=200,
+        description="Horde Maintenance",
+    )
     def get(self):
-        '''Details about the current performance of this Horde
-        '''
+        """Details about the current performance of this Horde
+        """
         load_dict = super().get()[0]
         load_dict["past_minute_megapixelsteps"] = db.stats.get_things_per_min()
-        return(load_dict,200)
+        return (load_dict, 200)
+
 
 class HordeNews(HordeNews):
-    
     @cache.cached(timeout=300)
     def get_news(self):
-        return(horde_news + stable_horde_news)
+        return horde_news + stable_horde_news
 
 
 api.add_resource(SyncGenerate, "/generate/sync")

@@ -1,24 +1,35 @@
-from flask import render_template, redirect, url_for, request
-import random, time, os, oauthlib, secrets, logging
-from flask_dance.contrib.google import google
+import random
+import secrets
+from uuid import uuid4
+
+import bleach
+import oauthlib
+from flask import redirect, render_template, request, url_for
 from flask_dance.contrib.discord import discord
 from flask_dance.contrib.github import github
+from flask_dance.contrib.google import google
 from markdown import markdown
-from uuid import uuid4
-from . import logger, maintenance, args, HORDE, cache
-from .vars import thing_name, raw_thing_name, thing_divisor, google_verification_string, img_url, horde_title
-from .classes import db
-from .classes import waiting_prompts,User,News
-import bleach
-from .utils import ConvertAmount, is_profane
 
-dance_return_to = '/'
+from . import HORDE, args, cache, logger, maintenance
+from .classes import News, User, db, waiting_prompts
+from .utils import ConvertAmount, is_profane
+from .vars import (
+    google_verification_string,
+    horde_title,
+    img_url,
+    raw_thing_name,
+    thing_divisor,
+    thing_name,
+)
+
+dance_return_to = "/"
+
 
 @logger.catch(reraise=True)
-@HORDE.route('/')
+@HORDE.route("/")
 @cache.cached()
 def index():
-    with open(f'index_{args.horde}.md') as index_file:
+    with open(f"index_{args.horde}.md") as index_file:
         index = index_file.read()
     top_contributor = db.get_top_contributor()
     top_worker = db.get_top_worker()
@@ -30,8 +41,12 @@ def index():
         top_contributors = f'\n<img src="{img_url}/{big_image}.jpg" width="800" />'
     else:
         # We don't use the prefix char, so we just discard it
-        top_contrib_things = ConvertAmount(top_contributor.contributions[thing_name] * thing_divisor)
-        top_contrib_fulfillments = ConvertAmount(top_contributor.contributions['fulfillments'])
+        top_contrib_things = ConvertAmount(
+            top_contributor.contributions[thing_name] * thing_divisor
+        )
+        top_contrib_fulfillments = ConvertAmount(
+            top_contributor.contributions["fulfillments"]
+        )
         top_worker_things = ConvertAmount(top_worker.contributions * thing_divisor)
         top_worker_fulfillments = ConvertAmount(top_worker.fulfilments)
         top_contributors = f"""\n## Top Contributors
@@ -57,34 +72,35 @@ This is the worker which has generated the most pixels for the horde.
 
 [Terms of Service](/terms)"""
     news = ""
-    sorted_news =News().sorted_news()
+    sorted_news = News().sorted_news()
     for iter in range(len(sorted_news)):
         news += f"* {sorted_news[iter]['newspiece']}\n"
-        if iter > 1: break
+        if iter > 1:
+            break
     totals = db.get_total_usage()
     wp_totals = waiting_prompts.count_totals()
     active_worker_count = db.count_active_workers()
     avg_performance = ConvertAmount(db.stats.get_request_avg() * active_worker_count)
-    # We multiple with the divisor again, to get the raw amount, which we can conver to prefix accurately
+    # We multiply with the divisor again, to get the raw amount, which we can convert to prefix accurately
     total_things = ConvertAmount(totals[thing_name] * thing_divisor)
     queued_things = ConvertAmount(wp_totals[f"queued_{thing_name}"] * thing_divisor)
     total_fulfillments = ConvertAmount(totals["fulfilments"])
     findex = index.format(
-        horde_title = horde_title,
-        horde_img_url = img_url,
-        horde_image = align_image,
-        avg_performance= avg_performance.amount,
-        avg_thing_name= avg_performance.prefix + raw_thing_name,
-        total_things = total_things.amount,
-        total_things_name = total_things.prefix + raw_thing_name,
-        total_fulfillments = total_fulfillments.amount,
-        total_fulfillments_char = total_fulfillments.char,
-        active_workers = active_worker_count,
-        total_queue = wp_totals["queued_requests"],
-        queued_things = queued_things.amount,
-        queued_things_name = queued_things.prefix + raw_thing_name,
-        maintenance_mode = maintenance.active,
-        news = news,
+        horde_title=horde_title,
+        horde_img_url=img_url,
+        horde_image=align_image,
+        avg_performance=avg_performance.amount,
+        avg_thing_name=avg_performance.prefix + raw_thing_name,
+        total_things=total_things.amount,
+        total_things_name=total_things.prefix + raw_thing_name,
+        total_fulfillments=total_fulfillments.amount,
+        total_fulfillments_char=total_fulfillments.char,
+        active_workers=active_worker_count,
+        total_queue=wp_totals["queued_requests"],
+        queued_things=queued_things.amount,
+        queued_things_name=queued_things.prefix + raw_thing_name,
+        maintenance_mode=maintenance.active,
+        news=news,
     )
 
     style = """<style>
@@ -98,7 +114,7 @@ This is the worker which has generated the most pixels for the horde.
         }
         </style>
     """
-    
+
     head = f"""<head>
     <title>{horde_title} Horde</title>
     <meta name="google-site-verification" content="{google_verification_string}" />
@@ -106,7 +122,7 @@ This is the worker which has generated the most pixels for the horde.
     {style}
     </head>
     """
-    return(head + markdown(findex + top_contributors + policies))
+    return head + markdown(findex + top_contributors + policies)
 
 
 @logger.catch(reraise=True)
@@ -116,21 +132,21 @@ def get_oauth_id():
     github_data = None
     authorized = False
     if google.authorized:
-        google_user_info_endpoint = '/oauth2/v2/userinfo'
+        google_user_info_endpoint = "/oauth2/v2/userinfo"
         try:
             google_data = google.get(google_user_info_endpoint).json()
             authorized = True
         except oauthlib.oauth2.rfc6749.errors.TokenExpiredError:
             pass
     if not authorized and discord.authorized:
-        discord_info_endpoint = '/api/users/@me'
+        discord_info_endpoint = "/api/users/@me"
         try:
             discord_data = discord.get(discord_info_endpoint).json()
             authorized = True
         except oauthlib.oauth2.rfc6749.errors.TokenExpiredError:
             pass
     if not authorized and github.authorized:
-        github_info_endpoint = '/user'
+        github_info_endpoint = "/user"
         try:
             github_data = github.get(github_info_endpoint).json()
             authorized = True
@@ -143,126 +159,133 @@ def get_oauth_id():
         oauth_id = f'd_{discord_data["id"]}'
     elif github_data:
         oauth_id = f'gh_{github_data["id"]}'
-    return(oauth_id)
+    return oauth_id
 
 
 @logger.catch(reraise=True)
-@HORDE.route('/register', methods=['GET', 'POST'])
+@HORDE.route("/register", methods=["GET", "POST"])
 def register():
     api_key = None
     user = None
-    welcome = 'Welcome'
-    username = ''
+    welcome = "Welcome"
+    username = ""
     pseudonymous = False
     oauth_id = get_oauth_id()
     if oauth_id:
         user = db.find_user_by_oauth_id(oauth_id)
         if user:
             username = user.username
-    if request.method == 'POST':
+    if request.method == "POST":
         api_key = secrets.token_urlsafe(16)
         if user:
-            username = bleach.clean(request.form['username'])
+            username = bleach.clean(request.form["username"])
             if is_profane(username):
-                return render_template('bad_username.html', page_title="Bad Username")
+                return render_template("bad_username.html", page_title="Bad Username")
             user.username = username
             user.api_key = api_key
         else:
             # Triggered when the user created a username without logging in
-            if is_profane(request.form['username']):
-                return render_template('bad_username.html', page_title="Bad Username")
+            if is_profane(request.form["username"]):
+                return render_template("bad_username.html", page_title="Bad Username")
             if not oauth_id:
                 oauth_id = str(uuid4())
                 pseudonymous = True
             user = User(db)
-            user.create(request.form['username'], oauth_id, api_key, None)
-            username = bleach.clean(request.form['username'])
+            user.create(request.form["username"], oauth_id, api_key, None)
+            username = bleach.clean(request.form["username"])
     if user:
         welcome = f"Welcome back {user.get_unique_alias()}"
-    return render_template('register.html',
-                           page_title="Join the Stable Horde!",
-                           welcome=welcome,
-                           user=user,
-                           api_key=api_key,
-                           username=username,
-                           pseudonymous=pseudonymous,
-                           oauth_id=oauth_id)
+    return render_template(
+        "register.html",
+        page_title="Join the Stable Horde!",
+        welcome=welcome,
+        user=user,
+        api_key=api_key,
+        username=username,
+        pseudonymous=pseudonymous,
+        oauth_id=oauth_id,
+    )
 
 
 @logger.catch(reraise=True)
-@HORDE.route('/transfer', methods=['GET', 'POST'])
+@HORDE.route("/transfer", methods=["GET", "POST"])
 def transfer():
     src_api_key = None
     src_user = None
     dest_username = None
     kudos = None
     error = None
-    welcome = 'Welcome'
+    welcome = "Welcome"
     oauth_id = get_oauth_id()
     if oauth_id:
         src_user = db.find_user_by_oauth_id(oauth_id)
         if not src_user:
             # This probably means the user was deleted
             oauth_id = None
-    if request.method == 'POST':
-        dest_username = request.form['username']
-        amount = request.form['amount']
+    if request.method == "POST":
+        dest_username = request.form["username"]
+        amount = request.form["amount"]
         if not amount.isnumeric():
             kudos = 0
             error = "Please enter a number in the kudos field"
         # Triggered when the user submited without logging in
         elif src_user:
-            ret = db.transfer_kudos_to_username(src_user,dest_username,int(amount))
+            ret = db.transfer_kudos_to_username(src_user, dest_username, int(amount))
             kudos = ret[0]
             error = ret[1]
         else:
-            ret = db.transfer_kudos_from_apikey_to_username(request.form['src_api_key'],dest_username,int(amount))
+            ret = db.transfer_kudos_from_apikey_to_username(
+                request.form["src_api_key"], dest_username, int(amount)
+            )
             kudos = ret[0]
             error = ret[1]
     if src_user:
         welcome = f"Welcome back {src_user.get_unique_alias()}. You have {src_user.kudos} kudos remaining"
-    return render_template('transfer_kudos.html',
-                           page_title="Kudos Transfer",
-                           welcome=welcome,
-                           kudos=kudos,
-                           error=error,
-                           dest_username=dest_username,
-                           oauth_id=oauth_id)
+    return render_template(
+        "transfer_kudos.html",
+        page_title="Kudos Transfer",
+        welcome=welcome,
+        kudos=kudos,
+        error=error,
+        dest_username=dest_username,
+        oauth_id=oauth_id,
+    )
 
 
-@HORDE.route('/google/<return_to>')
+@HORDE.route("/google/<return_to>")
 def google_login(return_to):
     global dance_return_to
-    dance_return_to = '/' + return_to
-    return redirect(url_for('google.login'))
+    dance_return_to = "/" + return_to
+    return redirect(url_for("google.login"))
 
 
-@HORDE.route('/discord/<return_to>')
+@HORDE.route("/discord/<return_to>")
 def discord_login(return_to):
     global dance_return_to
-    dance_return_to = '/' + return_to
-    return redirect(url_for('discord.login'))
+    dance_return_to = "/" + return_to
+    return redirect(url_for("discord.login"))
 
 
-@HORDE.route('/github/<return_to>')
+@HORDE.route("/github/<return_to>")
 def github_login(return_to):
     global dance_return_to
-    dance_return_to = '/' + return_to
-    return redirect(url_for('github.login'))
+    dance_return_to = "/" + return_to
+    return redirect(url_for("github.login"))
 
 
-@HORDE.route('/finish_dance')
+@HORDE.route("/finish_dance")
 def finish_dance():
     global dance_return_to
     redirect_url = dance_return_to
-    dance_return_to = '/'
+    dance_return_to = "/"
     return redirect(redirect_url)
 
 
-@HORDE.route('/privacy')
+@HORDE.route("/privacy")
 def privacy():
-    return render_template('privacy_policy.html')
+    return render_template("privacy_policy.html")
 
-@HORDE.route('/terms')
+
+@HORDE.route("/terms")
 def terms():
-    return render_template('terms_of_service.html')
+    return render_template("terms_of_service.html")
